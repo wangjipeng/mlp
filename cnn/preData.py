@@ -3,6 +3,10 @@
 
 import os
 import jieba
+import numpy as np
+import math
+
+
 DATA_DIR = '/Users/wangjipeng/Tensorflow/I\'ll make you regret it/CNN_Text/data/sohu_news_data'
 DATA_DIR_WRITE = '/Users/wangjipeng/Tensorflow/I\'ll make you regret it/CNN_Text/data/jieba_sohu_news_data'
 STOPWORDS_DIR = '/Users/wangjipeng/Tensorflow/I\'ll make you regret it/CNN_Text/data/sohu_news_stopwords.txt'
@@ -45,6 +49,26 @@ def init_stopwords():
             # print (word)
             sohu_news_stopwords_set.add(word)
     return sohu_news_stopwords_set
+
+
+
+def batch_iter(data, batch_size, shuff=True):
+
+    data = np.array(data)
+    len_data = len(data)
+    num_epoch = int(math.ceil(float(len(data))/ batch_size))
+    if shuff:
+        shuff_flag = np.random.permutation(np.arange(len_data))
+        shuffled_data = data[shuff_flag]
+    else:
+        shuffled_data = data
+    for batch_num in range(num_epoch):
+        start_index = batch_num * batch_size
+        end_index = min((batch_num + 1) * batch_size, data)
+        yield shuffled_data[start_index: end_index]
+
+
+
 
 
 if __name__ == '__main__':

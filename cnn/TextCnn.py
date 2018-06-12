@@ -63,6 +63,36 @@ class TextCnn(object):
                 )
                 maxpool_lis.append(pooled)
 
+        with tf.variable_scope('full_connected_layer'):
+            num_filters_total = self.filterNum * len(config.filterSizes)
+            self.h_pool = tf.concat(maxpool_lis, 3)
+            self.h_pool_flat = tf.reshape(self.h_pool, [-1, num_filters_total])
+            print_variable_info(self.h_pool_flat)
+            # 在训练阶段，对max-pooling layer的输出实行一些dropout，以概率p激活，激活的部分传递给softmax层。
+            self.h_drop = tf.nn.dropout(self.h_pool_flat, dropout)
+
+        with tf.variable_scope('softmax_layer'):
+            soft_wei = tf.get_variable(name='soft_w', shape=[num_filters_total, self.classNum], initializer=tf.contrib.layers.xavier_initializer(), dtype=tf.float32)
+            soft_baise = tf.get_variable(name='soft_b', shape=[self.classNum], initializer=tf.contrib.layers.xavier_initializer(), dtype=tf.float32)
+            self.score = tf.add(tf.matmul(self.h_dropm, soft_wei), soft_baise, name='score')
+            self.loss = tf.nn.softmax_cross_entropy_with_logits(self.score, output_y, name='soft_max')
+            self.prediction = tf.argmax(self.scores, 1, name="prediction")
+            self.correct_prediction = tf.equal(self.prediction, tf.arg_max(output_y, '1'))
+            self.accuracy = tf.reduce_mean(tf.cast(self.correct_prediction, dtype=tf.float32), name='accuracy')
+            tf.summary.scalar("accuracy", self.accuracy)
+
+        self.global_step = tf.contrib.framework.get_or_create_global_step()
+        optimizer = self.optimizer(self.learning_rate)
+        self.grads_and_vars = optimizer.compute_gradients(self.loss)
+        self.train_op = optimizer.apply_gradients(self.grads_and_vars, global_step=self.global_step)
+
+
+
+
+
+
+
+
 
 
 

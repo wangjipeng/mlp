@@ -13,7 +13,7 @@ import numpy as np
 from  tensorflow.contrib import learn
 import tensorflow as tf
 
-from preData import init_sohu_data, DATA_DIR_WRITE
+from preData import init_sohu_data, DATA_DIR_WRITE, batch_iter
 import TextCnn
 
 def initParameter():
@@ -35,6 +35,7 @@ def initParameter():
     parser.add_argument('--optimizer', type=str, default='relu', help='Activation function')
     parser.add_argument('--l2-reg-lambda', type=float, default=0.0, help='L2 regularization lambda')
     parser.add_argument('--init-scale', type=float, default=0.1, help='Init scale')
+    parser.add_argument('--drop', type=float, default=0.5, help= 'drop init')
 
 
 
@@ -58,7 +59,7 @@ def initParameter():
 class Train(object):
     def __init__(self, config):
         self.config = config
-        with tf.name_scope('valid') as scope:
+        with tf.name_scope('train') as scope:
             with tf.variable_scope('model', reuse=True):
                 self.input_x = tf.placeholder(name='input_x', dtype=tf.float32, shape=[None, config.max_textlength])
                 self.output_y = tf.placeholder(name='output_y', dtype=tf.float32, shape=[None, config.classNum])
@@ -72,7 +73,39 @@ class Train(object):
                     print ('not TextCnn or TextRnn ...')
                     exit(0)
 
+    def train_step(self, session, input_xx, output_yy, summary_writer=None):
+        start_time = time.time()
+        feed_dict = dict
+        feed_dict[self.input_x] = input_xx
+        feed_dict[self.output_y] = output_yy
+        feed_dict[self.dropout_keep_prob_ph] = self.config.dropout_keep_prob
+        fetches = [
+            self.model.train_op,
+            self.model.global_step,
+            self.model.loss,
+            self.model.accuracy,
+            self.model.summary
+        ]
+        _, global_step, loss_val, accuracy_val, summary = session.run(fetches, feed_dict)
 
+
+
+
+class Vaild(object):
+    def __init__(self, config):
+        self.config = config
+        with tf.name_scope('vaild') as scope:
+            with tf.variable_scope('model', reuse=True):
+                self.input_x = tf.placeholder(dtype=tf.float32, shape=[None, config.max_textlength], name='input')
+                self.output_y = tf.placeholder(dtype=tf.float32, shape=[None, config.classNum], name='ouput')
+                self.dropout = tf.placeholder(dtype=tf.float32, name='dropout')
+                if 'text_cnn' == config.kind:
+                    self.model = TextCnn(self.input_x, self.output_y, self.dropout, self.config, scope)
+                elif 'text_rnn' == config.kind:
+                    pass
+                else:
+                    print ('not TextCnn or TextRnn ...')
+                    exit(0)
 
 
 
@@ -131,11 +164,26 @@ def main():
 
     # start the model
     print ('traing the model...')
-    # with tf.Graph().as_default():
-    #     with tf.Session() as sess:
-    #         train = Train(config)
+    with tf.Graph().as_default():
+        with tf.Session() as sess:
+            train = Train(config)
+            valid = Vaild(config)
+            train_summary_writer = tf.summary.FileWriter(os.path.join(out_dir, "summaries", "train"), sess.graph)
+            Vocabulary.save(os.path.join(out_dir, "vocab"))
+            sess.run(tf.global_variables_initializer())
+            saver = tf.train.Saver(tf.global_variables(), max_to_keep=0)
 
-
+    for num_epoch in range(10):
+        training_batches = batch_iter(zip(x_train, y_train), config.batch_size)
+        for training_batch in training_batches:
+            x_batch, y_batch = zip(*training_batch)
+            step = train.train_step(sess, x_batch, y_batch, train_summary_writer)
+            if step % config.valid_freq == 0:
+                valid.valid_step(sess, x_valid, y_valid)
+            if step % config.save_freq == 0:
+                path = saver.save(sess, checkpoint_prefix, step)
+                print(path)
+                print("Saved model checkpoint to {}\n".format(path))
 
 
 
